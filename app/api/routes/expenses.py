@@ -1,5 +1,6 @@
-from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from datetime import datetime, timedelta
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_current_user
@@ -29,15 +30,43 @@ def create_expense(
 
 @router.get("/", response_model=List[expense_schemas.ExpenseOut])
 def list_expenses(
+    period: Optional[str] = Query(
+        default=None,
+        description="week, month, 3months, or custom"
+    ),
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
-    return (
+    query = (
         db.query(models.Expense)
         .filter(models.Expense.user_id == current_user.id)
-        .order_by(models.Expense.created_at.desc())
-        .all()
     )
+
+    now = datetime.utcnow()
+
+    if period == "week":
+        since = now - timedelta(weeks=1)
+        query = query.filter(models.Expense.created_at >= since)
+    elif period == "month":
+        since = now - timedelta(days=30)
+        query = query.filter(models.Expense.created_at >= since)
+    elif period == "3months":
+        since = now - timedelta(days=90)
+        query = query.filter(models.Expense.created_at >= since)
+    elif period == "custom":
+        if not start_date or not end_date:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="start_date and end_date are required for custom period",
+            )
+        query = query.filter(
+            models.Expense.created_at >= start_date,
+            models.Expense.created_at <= end_date,
+        )
+
+    return query.order_by(models.Expense.created_at.desc()).all()
 
 
 @router.get("/{expense_id}", response_model=expense_schemas.ExpenseOut)
