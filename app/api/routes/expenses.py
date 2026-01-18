@@ -32,10 +32,12 @@ def create_expense(
 def list_expenses(
     period: Optional[str] = Query(
         default=None,
-        description="week, month, 3months, or custom"
+        description="week, month, 3months, or custom",
     ),
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
+    limit: int = Query(10, ge=1, le=100, description="Max items to return"),
+    offset: int = Query(0, ge=0, description="Number of items to skip"),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user),
 ):
@@ -66,8 +68,10 @@ def list_expenses(
             models.Expense.created_at <= end_date,
         )
 
-    return query.order_by(models.Expense.created_at.desc()).all()
+    query = query.order_by(models.Expense.created_at.desc())
 
+    expenses = query.offset(offset).limit(limit).all()
+    return expenses
 
 @router.get("/{expense_id}", response_model=expense_schemas.ExpenseOut)
 def get_expense(
